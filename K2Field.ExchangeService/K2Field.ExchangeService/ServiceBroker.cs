@@ -22,6 +22,7 @@ namespace K2Field.ExchangeService
             {
                 throw new Exception("Error : the authentication mode must be set to Static.");
             }
+            #region Membership Service
             ServiceObject svo = new ServiceObject("Exchange Membership");
             svo.MetaData.DisplayName = "Exchange Membership";
             svo.Active = true;
@@ -39,20 +40,55 @@ namespace K2Field.ExchangeService
             svo.Methods.Create(GetDistributionListMembers);
 
             Service.ServiceObjects.Add(svo);
+            #endregion
+
+            #region exchange management
+            ServiceObject svoMgt = new ServiceObject("Exchange Management");
+            svoMgt.MetaData.DisplayName = "Exchange Management";
+            svoMgt.Active = true;
+            /*
+            row[""] = user;
+            row[""] = accessRights;
+            row["Deny"] = deny;
+            row["IsInherited"] = isInherited;*/
+
+
+            svoMgt.Properties.Add(CreateProperty("User", SoType.Text));
+            svoMgt.Properties.Add(CreateProperty("AccessRights", SoType.Text));
+            svoMgt.Properties.Add(CreateProperty("Deny", SoType.YesNo));
+            svoMgt.Properties.Add(CreateProperty("IsInherited", SoType.YesNo));
+                
+
+            MethodParameter MailBoxNameParameter = CreateParameter("MailBoxName", SoType.Text, true);
+            MethodParameter includeAllParam = CreateParameter("IncludeAll", SoType.YesNo, true);
+            Method GetMailBoxPermissions = CreateMethod("GetMailBoxPermissions", MethodType.List);
+
+            GetMailBoxPermissions.MethodParameters.Add(MailBoxNameParameter);
+            GetMailBoxPermissions.MethodParameters.Add(includeAllParam);
+            GetMailBoxPermissions.ReturnProperties.Add("User");
+            GetMailBoxPermissions.ReturnProperties.Add("AccessRights");
+            GetMailBoxPermissions.ReturnProperties.Add("Deny");
+            GetMailBoxPermissions.ReturnProperties.Add("IsInherited");
+
+            svoMgt.Methods.Create(GetMailBoxPermissions);
+
+            Service.ServiceObjects.Add(svoMgt);
+            #endregion exchange management
+
 
             return base.DescribeSchema();
         }
 
         public override void Execute()
         {
-            //récupération service appellé 
+
+            //get currently called service
             ServiceObject calledSvo = this.Service.ServiceObjects[0];
-            //récupération méthode 
+            //get currently called method 
             Method method = calledSvo.Methods[0];
-
-
-
-            //création générique table de retour
+            string userName = Service.ServiceConfiguration.ServiceAuthentication.UserName;
+            string password = Service.ServiceConfiguration.ServiceAuthentication.Password;
+            //generic results dataTable
             DataTable dtResults = new DataTable();
             for (int i = 0; i < method.ReturnProperties.Count; i++)
             {
@@ -60,8 +96,7 @@ namespace K2Field.ExchangeService
             }
             if (calledSvo.Name == "Exchange Membership")
             {
-                string userName = Service.ServiceConfiguration.ServiceAuthentication.UserName;
-                string password = Service.ServiceConfiguration.ServiceAuthentication.Password;
+                
                 ExchangeHelper helper = new ExchangeHelper(userName, password);
                 if (method.Name == "GetDistributionListMembers")
                 {
@@ -69,6 +104,18 @@ namespace K2Field.ExchangeService
                     dtResults = helper.getDistributionListMembers(listName, dtResults);
                 }
             }
+            else if (calledSvo.Name == "Exchange Management")
+            {
+                if (method.Name == "GetMailBoxPermissions")
+                {
+                    ExchangeManagementHelper helper = new ExchangeManagementHelper(userName, password);
+                    string mailBoxName = method.MethodParameters["MailBoxName"].Value.ToString();
+                    bool includeAll = bool.Parse(method.MethodParameters["IncludeAll"].Value.ToString());
+
+                     dtResults = helper.GetMailBoxPermissions(mailBoxName, includeAll, dtResults);
+                }
+            }
+               
             calledSvo.Properties.InitResultTable();
             foreach (DataRow dr in dtResults.Rows)
             {
